@@ -16,6 +16,8 @@ class SAR_Wiki_Crawler:
     def __init__(self):
         # Expresión regular para detectar si es un enlace de la Wikipedia
         self.wiki_re = re.compile(r"(http(s)?:\/\/(es)\.wikipedia\.org)?\/wiki\/[\w\/_\(\)\%]+")
+        #self.wiki_re = re.compile(r"https?:\/\/es\.wikipedia\.org\/wiki\/[\w\/_\(\)\%]+")
+
         # Expresión regular para limpiar anclas de editar
         self.edit_re = re.compile(r"\[(editar)\]")
         # Formato para cada nivel de sección
@@ -81,13 +83,15 @@ class SAR_Wiki_Crawler:
                 'div#catlinks, div.printfooter, div.mw-authority-control'
             )):
                 ele.decompose()
-
+            
             # Recogemos todos los enlaces del contenido del artículo
             for a in soup.select("div#bodyContent a", href=True):
                 href = a.get("href")
                 if href is not None:
+                    if(href.startswith("/wiki/")):
+                        href = urljoin(url, href)
                     urls.add(href)
-
+                    
             # Contenido del artículo
             content = soup.select((
                 "h1.firstHeading,"
@@ -156,7 +160,24 @@ class SAR_Wiki_Crawler:
         document = None
 
         # COMPLETAR
-
+        
+        cleanedText = clean_text(text)
+    
+        document = {"url": url, "title": "", "summary": "", "sections": []}
+        document["title"] = self.title_sum_re.match(cleanedText).group("title")
+        document["summary"] = self.title_sum_re.match(cleanedText).group("summary")
+        iter = list(self.sections_re.finditer(cleanedText))
+        for i in range(0, len(iter)):
+            nextSection = iter[i+1] if i+1 < len(iter) else None
+            sectionText = cleanedText[iter[i].span()[0]: nextSection.span()[0] if nextSection is not None else len(cleanedText)]
+            parsedSection = self.section_re.match(sectionText).groupdict()
+            document["sections"].append({"name": parsedSection["name"], "text": parsedSection["text"], "subsections": []})
+            iter2 = list(self.subsections_re.finditer(parsedSection["rest"]))
+            for i in range(0, len(iter2)):
+                nextSubsection = iter2[i+1] if i+1 < len(iter2) else None
+                subsectionText = parsedSection["rest"][iter2[i].span()[0]: nextSubsection.span()[0] if nextSubsection is not None else len(parsedSection["rest"])]
+                parsedSubsection = self.subsection_re.match(subsectionText).groupdict()
+                document["sections"][-1]["subsections"].append({"name": parsedSubsection["name"], "text": parsedSubsection["text"]})
         return document
 
 
@@ -235,9 +256,61 @@ class SAR_Wiki_Crawler:
             # Suponemos que vamos a poder alcanzar el límite para la nomenclatura
             # de guardado
             total_files = math.ceil(document_limit / batch_size)
+            
+        
+        while total_documents_captured < document_limit and len(queue) > 0:
+            # Obtenemos el nivel de profundidad de la URL actual
+            depth, parent_url, current_url = hq.heappop(queue)
+            # Si la URL ya ha sido visitada, pasamos a la siguiente
+            if current_url in visited:
+                continue
+            
+            visited.add(current_url)
 
-        # COMPLETAR
+            # Capturamos el contenido de la URL
+            content = self.get_wikipedia_entry_content(current_url)
 
+            # Si no se ha podido capturar, pasamos a la siguiente URL
+            if content is None:
+                continue
+
+            text, urls = content
+
+            # Parseamos el contenido capturado
+            document = self.parse_wikipedia_textual_content(text, current_url)
+
+            # Si no se ha podido parsear, pasamos a la siguiente URL
+            if document is None:
+                continue
+
+            documents.append(document)
+            total_documents_captured += 1
+            print(f"Capturado documento {total_documents_captured} - {current_url}")
+
+            # Guardamos los documentos capturados
+            if batch_size is not None and len(documents) == batch_size:
+                files_count += 1
+                print(f"Guardando {len(documents)} documentos en {base_filename}")
+                self.save_documents(documents, base_filename, files_count, total_files)
+                documents.clear()
+                
+
+            # Añadimos las URLs a la cola
+            for url in urls:
+                if url not in visited and self.is_valid_url(url):
+                    if max_depth_level > 0 and depth <= max_depth_level:
+                        print(f"Anadiendo {url} a la cola")
+                        hq.heappush(queue, (depth + 1, current_url, url))
+        
+        # Guardamos los documentos restantes
+        if documents:
+            files_count += 1
+            print(f"HGuardando {len(documents)} documentos en {base_filename}")
+            self.save_documents(documents, base_filename, files_count, total_files)
+            documents.clear()
+            
+
+        
 
     def wikipedia_crawling_from_url(self,
         initial_url: str, document_limit: int, base_filename: str,
