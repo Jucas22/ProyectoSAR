@@ -206,16 +206,12 @@ class SAR_Indexer:
         if file_or_dir.is_file():
             # is a file
             self.index_file(root)
-            self.docs[id] = f"${fullname}$"  # le asigno un id en docs#
         elif file_or_dir.is_dir():
             # is a directory
             for d, _, files in os.walk(root):
                 for filename in files:
                     if filename.endswith(".json"):
                         fullname = os.path.join(d, filename)
-                        ## añadir asignación de un id a cada documento ##
-                        self.docs[id] = f"${fullname}$"
-                        id += 1
                         self.index_file(fullname)
         else:
             print(f"ERROR:{root} is not a file nor directory!", file=sys.stderr)
@@ -258,14 +254,6 @@ class SAR_Indexer:
 
         return article
 
-    # función para gestionar la indexacion de los terminos de las urls
-    def add_term(self, term, value):
-        if term not in self.index:
-            self.index[term] = [value]
-        else:
-            if value not in self.index[term]:
-                self.index[term].append(value)
-
     def index_file(self, filename: str):
         """
 
@@ -280,25 +268,20 @@ class SAR_Indexer:
 
 
         """
-        last_documentid = list(self.docs.keys())[-1]
-
+        print(f"Indexing {filename}...")
+        self.docs[len(self.docs)] = filename
         for i, line in enumerate(open(filename)):
             j = self.parse_article(line)
-            ## añadido ##
-            if j["url"] not in self.urls:
-                self.urls.add(
-                    j["url"]
-                )  # añado la url al diccionario set para que no se repita
-                id_article = i + last_documentid * 100
-                """Hay un problema con self.index, no da exactamente lo que tiene que dar"""
-                self.articles[id_article] = (
-                    last_documentid,
-                    line,
-                )  # añado el articulo al diccionario
-                text = self.tokenize(j["all"].lower())
-                for term in text:
-                    self.add_term(term, id_article)
-        #
+            if self.already_in_index(j):
+                continue
+            if j['url'] not in self.urls: self.urls.add(j['url'])
+            artid = len(self.articles)
+            self.articles[artid] = (len(self.docs)-1, i+1)
+            for token in self.tokenize(j['all']):
+                if token not in self.index:
+                    self.index[token] = []
+                if artid not in self.index[token]:
+                    self.index[token].append(artid)
         # En la version basica solo se debe indexar el contenido "article"
         #
 
@@ -377,8 +360,9 @@ class SAR_Indexer:
         print("---------------------------------------------------")
         print(f"Number of indexed articles: {len(self.urls)}")
         print("---------------------------------------------------")
-        print(f"TOKES: \n       # of tokens in 'all': {len(self.index)}")
+        print(f"TOKENS: \n       # of tokens in 'all': {len(self.index)}")
         print("===================================================")
+    
 
     #################################
     ###                           ###
@@ -408,6 +392,7 @@ class SAR_Indexer:
 
         """
 
+        """
         if query is None or len(query) == 0:
             return []
         else:
@@ -420,8 +405,30 @@ class SAR_Indexer:
                 elif term is "OR":
 
                 else:
-
-
+        """
+        if query is None or len(query) == 0:
+            return []
+        terms = self.tokenize(query)
+        i = 0
+        p = self.get_posting(terms[i])
+        while i < len(terms):
+            if terms[i] == "not":
+                p = self.reverse_posting(self.get_posting(terms[i+1]))
+            elif terms[i] == "and":
+                if terms[i+1] == "not":
+                    p = self.and_posting(p, self.reverse_posting(self.get_posting(terms[i+2])))
+                    i += 1
+                else: 
+                    p = self.and_posting(p, self.get_posting(terms[i+1]))
+            elif terms[i] == "or":
+                if terms[i+1] == "not":
+                    p = self.or_posting(p, self.reverse_posting(self.get_posting(terms[i+2])))
+                    i += 1
+                else:
+                    p = self.or_posting(p, self.get_posting(terms[i+1]))
+            i += 1
+            
+        return p
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
@@ -443,9 +450,8 @@ class SAR_Indexer:
 
         NECESARIO PARA TODAS LAS VERSIONES
 
-        """
-        # return self.index[term]
-        pass
+        """ 
+        return self.index.get(term, [])
 
     def get_positionals(self, terms: str, index):
         """
@@ -516,19 +522,7 @@ class SAR_Indexer:
 
         """
 
-        result = []
-        i, j = 0, 0
-        while i < len(self.articles) and j < len(p):
-            if self.articles[i] == p[j]:
-                i += 1
-                j += 1
-            elif self.articles[i] < p[j]:
-                result.append(self.articles[i])
-                i += 1
-            else:
-                j += 1
-        result.extend(self.articles[i:])
-        return result
+        return [i for i in range(len(self.articles)) if i not in p]
 
     def and_posting(self, p1: list, p2: list):
         """
@@ -542,18 +536,7 @@ class SAR_Indexer:
         return: posting list con los artid incluidos en p1 y p2
 
         """
-        result = []
-        i, j = 0, 0
-        while i < len(p1) and j < len(p2):
-            if p1[i] == p2[j]:
-                result.append(p1[i])
-                i += 1
-                j += 1
-            elif p1[i] < p2[j]:
-                i += 1
-            else:
-                j += 1
-        return result
+        return sorted(set(p1).intersection(p2))
 
     def or_posting(self, p1: list, p2: list):
         """
@@ -571,22 +554,7 @@ class SAR_Indexer:
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
 
-        result = []
-        i, j = 0, 0
-        while i < len(p1) and j < len(p2):
-            if p1[i] == p2[j]:
-                result.append(p1[i])
-                i += 1
-                j += 1
-            elif p1[i] < p2[j]:
-                result.append(p1[i])
-                i += 1
-            else:
-                result.append(p2[j])
-                j += 1
-        result.extend(p1[i:])
-        result.extend(p2[j:])
-        return result
+        return sorted(set(p1).union(p2))
 
     def minus_posting(self, p1, p2):
         """
@@ -640,7 +608,7 @@ class SAR_Indexer:
                     print(f">>>>{query}\t{reference} != {result}<<<<")
                     errors = True
             else:
-                print(query)
+                print(line)
         return not errors
 
     def solve_and_show(self, query: str):
@@ -654,7 +622,22 @@ class SAR_Indexer:
         return: el numero de artículo recuperadas, para la opcion -T
 
         """
-        pass
-        ################
-        ## COMPLETAR  ##
-        ################
+        results = self.solve_query(query)
+        i = 0
+        print(f"Query: {query}")
+        stop = len(results) if self.show_all else 10
+        while i < stop:
+            articleFile = self.docs[self.articles[results[i]][0]]
+            fp = open(articleFile)
+            for j, line in enumerate(fp):
+                if j == self.articles[results[i]][1]:
+                    url = json.loads(line)["url"]
+                    title = json.loads(line)["title"]
+            print(f"{i+1}. ID Articulo - {results[i]} URL: {url}")
+            print(f"Titulo: {title}")
+            if self.show_snippet:
+                print("Snippet:")
+                print(json.loads(line)["summary"])
+            i += 1
+            
+        return len(results)
