@@ -274,10 +274,11 @@ class SAR_Indexer:
             j = self.parse_article(line)
             if self.already_in_index(j):
                 continue
-            if j['url'] not in self.urls: self.urls.add(j['url'])
+            if j["url"] not in self.urls:
+                self.urls.add(j["url"])
             artid = len(self.articles)
-            self.articles[artid] = (len(self.docs)-1, i+1)
-            for token in self.tokenize(j['all']):
+            self.articles[artid] = (len(self.docs) - 1, i + 1)
+            for token in self.tokenize(j["all"]):
                 if token not in self.index:
                     self.index[token] = []
                 if artid not in self.index[token]:
@@ -362,7 +363,6 @@ class SAR_Indexer:
         print("---------------------------------------------------")
         print(f"TOKENS: \n       # of tokens in 'all': {len(self.index)}")
         print("===================================================")
-    
 
     #################################
     ###                           ###
@@ -413,21 +413,25 @@ class SAR_Indexer:
         p = self.get_posting(terms[i])
         while i < len(terms):
             if terms[i] == "not":
-                p = self.reverse_posting(self.get_posting(terms[i+1]))
+                p = self.reverse_posting(self.get_posting(terms[i + 1]))
             elif terms[i] == "and":
-                if terms[i+1] == "not":
-                    p = self.and_posting(p, self.reverse_posting(self.get_posting(terms[i+2])))
-                    i += 1
-                else: 
-                    p = self.and_posting(p, self.get_posting(terms[i+1]))
-            elif terms[i] == "or":
-                if terms[i+1] == "not":
-                    p = self.or_posting(p, self.reverse_posting(self.get_posting(terms[i+2])))
+                if terms[i + 1] == "not":
+                    p = self.and_posting(
+                        p, self.reverse_posting(self.get_posting(terms[i + 2]))
+                    )
                     i += 1
                 else:
-                    p = self.or_posting(p, self.get_posting(terms[i+1]))
+                    p = self.and_posting(p, self.get_posting(terms[i + 1]))
+            elif terms[i] == "or":
+                if terms[i + 1] == "not":
+                    p = self.or_posting(
+                        p, self.reverse_posting(self.get_posting(terms[i + 2]))
+                    )
+                    i += 1
+                else:
+                    p = self.or_posting(p, self.get_posting(terms[i + 1]))
             i += 1
-            
+
         return p
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
@@ -450,7 +454,7 @@ class SAR_Indexer:
 
         NECESARIO PARA TODAS LAS VERSIONES
 
-        """ 
+        """
         return self.index.get(term, [])
 
     def get_positionals(self, terms: str, index):
@@ -625,7 +629,11 @@ class SAR_Indexer:
         results = self.solve_query(query)
         i = 0
         print(f"Query: {query}")
-        stop = len(results) if self.show_all else 10
+        stop = (
+            len(results)
+            if self.show_all
+            else (10 if len(results) > 10 else len(results))
+        )
         while i < stop:
             articleFile = self.docs[self.articles[results[i]][0]]
             fp = open(articleFile)
@@ -639,5 +647,5 @@ class SAR_Indexer:
                 print("Snippet:")
                 print(json.loads(line)["summary"])
             i += 1
-            
+
         return len(results)
