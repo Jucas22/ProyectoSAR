@@ -285,7 +285,6 @@ class SAR_Indexer:
                 if artid not in self.index[token]:
                     self.index[token][artid] = []
                 self.index[token][artid].append(pos)
-        print(self.index)
         # En la version basica solo se debe indexar el contenido "article"
         #
 
@@ -411,32 +410,70 @@ class SAR_Indexer:
         """
         if query is None or len(query) == 0:
             return []
-        terms = self.tokenize(query)
-        i = 0
-        posicional = []
-        p = self.get_posting(terms[i])
-        while i < len(terms):
-            if terms[i] == "not":
-                p = self.reverse_posting(self.get_posting(terms[i + 1]))
-            elif terms[i] == "and":
-                if terms[i + 1] == "not":
-                    p = self.and_posting(
-                        p, self.reverse_posting(self.get_posting(terms[i + 2]))
-                    )
-                    i += 1
-                else:
-                    p = self.and_posting(p, self.get_posting(terms[i + 1]))
-            elif terms[i] == "or":
-                if terms[i + 1] == "not":
-                    p = self.or_posting(
-                        p, self.reverse_posting(self.get_posting(terms[i + 2]))
-                    )
-                    i += 1
-                else:
-                    p = self.or_posting(p, self.get_posting(terms[i + 1]))
-            i += 1
 
-        return p
+        terms = query.replace('"', " ")
+        terms = terms.split()
+        i = 0
+        res = []
+        # Consultas posiconales:
+        while i < len(terms):
+            term = terms[i]
+            aux = 0
+            posicionales = []
+            if term == "AND":
+                res += ["AND"]
+                i += 1
+            elif term == "OR":
+                res += ["OR"]
+                i += 1
+            elif term == "NOT":
+                res += ["NOT"]
+                i += 1
+            else:
+                while (
+                    (i + aux) < len(terms)
+                    and terms[i + aux] != "AND"
+                    and terms[i + aux] != "OR"
+                    and terms[i + aux] != "NOT"
+                ):
+                    posicionales.append(terms[i + aux])
+                    aux += 1
+                if len(posicionales) == 1:
+                    res.append(self.get_posting(term))
+                    i += 1
+                else:
+                    res.append(self.get_positionals(posicionales))
+                    i += aux
+
+        # Consulta normal
+        solve = []
+        i = 0
+        while i < len(res):
+            r = res[i]
+            if terms[i] == "NOT":
+                solve = self.reverse_posting(res[i + 1])
+                i += 2
+            elif terms[i] == "AND":
+                if terms[i + 1] == "NOT":
+                    sig = self.reverse_posting(res[i + 2])
+                    i += 3
+                else:
+                    sig = res[i + 1]
+                    i += 2
+                solve = self.and_posting(solve, sig)
+            elif terms[i] == "OR":
+                if terms[i + 1] == "NOT":
+                    sig = self.reverse_posting(res[i + 2])
+                    i += 3
+                else:
+                    sig = res[i + 1]
+                    i += 2
+                solve = self.or_posting(solve, sig)
+            else:
+                solve = r
+                i += 1
+
+        return solve
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
@@ -532,7 +569,6 @@ class SAR_Indexer:
         return: posting list con todos los artid exceptos los contenidos en p
 
         """
-
         return [i for i in range(len(self.articles)) if i not in p]
 
     def and_posting(self, p1: list, p2: list):
