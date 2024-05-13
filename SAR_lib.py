@@ -278,11 +278,14 @@ class SAR_Indexer:
                 self.urls.add(j["url"])
             artid = len(self.articles)
             self.articles[artid] = (len(self.docs) - 1, i + 1)
+            pos = 0
             for token in self.tokenize(j["all"]):
                 if token not in self.index:
-                    self.index[token] = []
+                    self.index[token] = {}
                 if artid not in self.index[token]:
-                    self.index[token].append(artid)
+                    self.index[token][artid] = []
+                self.index[token][artid].append(pos)
+        print(self.index)
         # En la version basica solo se debe indexar el contenido "article"
         #
 
@@ -410,6 +413,7 @@ class SAR_Indexer:
             return []
         terms = self.tokenize(query)
         i = 0
+        posicional = []
         p = self.get_posting(terms[i])
         while i < len(terms):
             if terms[i] == "not":
@@ -455,7 +459,10 @@ class SAR_Indexer:
         NECESARIO PARA TODAS LAS VERSIONES
 
         """
-        return self.index.get(term, [])
+        if term in self.index:
+            return list(self.index[term].keys())
+        else:
+            return []
 
     def get_positionals(self, terms: str, index):
         """
@@ -627,6 +634,7 @@ class SAR_Indexer:
 
         """
         results = self.solve_query(query)
+        print(results)
         i = 0
         print(f"Query: {query}")
         stop = (
