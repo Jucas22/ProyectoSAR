@@ -285,6 +285,7 @@ class SAR_Indexer:
                 if artid not in self.index[token]:
                     self.index[token][artid] = []
                 self.index[token][artid].append(pos)
+                pos += 1
         # En la version basica solo se debe indexar el contenido "article"
         #
 
@@ -393,21 +394,6 @@ class SAR_Indexer:
         return: posting list con el resultado de la query
 
         """
-
-        """
-        if query is None or len(query) == 0:
-            return []
-        else:
-            terms = self.tokenize(query)
-            for term in terms:
-                if term is "NOT":
-
-                elif term is "AND":
-
-                elif term is "OR":
-
-                else:
-        """
         if query is None or len(query) == 0:
             return []
 
@@ -442,27 +428,28 @@ class SAR_Indexer:
                     res.append(self.get_posting(term))
                     i += 1
                 else:
-                    res.append(self.get_positionals(posicionales))
+                    res.append(self.get_positionals(posicionales, False))
                     i += aux
 
         # Consulta normal
         solve = []
+        # print(res)
         i = 0
         while i < len(res):
             r = res[i]
-            if terms[i] == "NOT":
+            if res[i] == "NOT":
                 solve = self.reverse_posting(res[i + 1])
                 i += 2
-            elif terms[i] == "AND":
-                if terms[i + 1] == "NOT":
+            elif res[i] == "AND":
+                if res[i + 1] == "NOT":
                     sig = self.reverse_posting(res[i + 2])
                     i += 3
                 else:
                     sig = res[i + 1]
                     i += 2
                 solve = self.and_posting(solve, sig)
-            elif terms[i] == "OR":
-                if terms[i + 1] == "NOT":
+            elif res[i] == "OR":
+                if res[i + 1] == "NOT":
                     sig = self.reverse_posting(res[i + 2])
                     i += 3
                 else:
@@ -472,7 +459,6 @@ class SAR_Indexer:
             else:
                 solve = r
                 i += 1
-
         return solve
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
@@ -513,7 +499,31 @@ class SAR_Indexer:
         return: posting list
 
         """
-        pass
+        res = []
+        if terms[0] in self.index:
+            for tupla in self.index[terms[0]].items():
+                artid, listpos = tupla
+                for pos in listpos:
+                    sigo = True
+                    for term in (term for term in terms[1:] if sigo):
+                        if term in self.index:
+                            if artid in self.index[term]:
+                                if (pos + 1) in self.index[term][artid]:
+                                    pos += 1
+                                    encontrado = True
+                                else:
+                                    sigo = False
+                            else:
+                                sigo = False
+                        else:
+                            sigo = False
+                    if sigo and artid not in res:
+                        res += [artid]
+                        break
+            return res
+        else:
+            return []
+
         ########################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE POSICIONALES ##
         ########################################################
@@ -670,9 +680,7 @@ class SAR_Indexer:
 
         """
         results = self.solve_query(query)
-        print(results)
         i = 0
-        print(f"Query: {query}")
         stop = (
             len(results)
             if self.show_all
