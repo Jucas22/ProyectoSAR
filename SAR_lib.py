@@ -3,8 +3,13 @@
 # MÉTODOS IMPLEMENTADOS:
 #   index_file
 #   show_stats
-#
-#
+#   solve_query
+#   get_posting
+#   get_positionals
+#   reverse_posting
+#   and_posting
+#   or_posting
+#   solve_and_show
 
 
 import json
