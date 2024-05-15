@@ -1,3 +1,9 @@
+# TRABAJO REALIZADO POR:
+# Castelló Beltrán, J; Guzman Alamos, R & Jaen Ruiz, A.J.
+# METODOS IMPLEMENTADOS:
+# 	parse_wikipedia_textual_content
+#   star_crawling
+
 #! -*- encoding: utf8 -*-
 import heapq as hq
 
@@ -11,29 +17,31 @@ import json
 import math
 import os
 
+
 class SAR_Wiki_Crawler:
 
     def __init__(self):
         # Expresión regular para detectar si es un enlace de la Wikipedia
-        self.wiki_re = re.compile(r"(http(s)?:\/\/(es)\.wikipedia\.org)?\/wiki\/[\w\/_\(\)\%]+")
-        #self.wiki_re = re.compile(r"https?:\/\/es\.wikipedia\.org\/wiki\/[\w\/_\(\)\%]+")
+        self.wiki_re = re.compile(
+            r"(http(s)?:\/\/(es)\.wikipedia\.org)?\/wiki\/[\w\/_\(\)\%]+"
+        )
+        # self.wiki_re = re.compile(r"https?:\/\/es\.wikipedia\.org\/wiki\/[\w\/_\(\)\%]+")
 
         # Expresión regular para limpiar anclas de editar
         self.edit_re = re.compile(r"\[(editar)\]")
         # Formato para cada nivel de sección
-        self.section_format = {
-            "h1": "##{}##",
-            "h2": "=={}==",
-            "h3": "--{}--"
-        }
+        self.section_format = {"h1": "##{}##", "h2": "=={}==", "h3": "--{}--"}
 
         # Expresiones regulares útiles para el parseo del documento
-        self.title_sum_re = re.compile(r"##(?P<title>.+)##\n(?P<summary>((?!==.+==).+|\n)+)(?P<rest>(.+|\n)*)")
+        self.title_sum_re = re.compile(
+            r"##(?P<title>.+)##\n(?P<summary>((?!==.+==).+|\n)+)(?P<rest>(.+|\n)*)"
+        )
         self.sections_re = re.compile(r"==.+==\n")
-        self.section_re = re.compile(r"==(?P<name>.+)==\n(?P<text>((?!--.+--).+|\n)*)(?P<rest>(.+|\n)*)")
+        self.section_re = re.compile(
+            r"==(?P<name>.+)==\n(?P<text>((?!--.+--).+|\n)*)(?P<rest>(.+|\n)*)"
+        )
         self.subsections_re = re.compile(r"--.+--\n")
         self.subsection_re = re.compile(r"--(?P<name>.+)--\n(?P<text>(.+|\n)*)")
-
 
     def is_valid_url(self, url: str) -> bool:
         """Verifica si es una dirección válida para indexar
@@ -45,7 +53,6 @@ class SAR_Wiki_Crawler:
             bool: True si es valida, en caso contrario False
         """
         return self.wiki_re.fullmatch(url) is not None
-
 
     def get_wikipedia_entry_content(self, url: str) -> Optional[Tuple[str, List[str]]]:
         """Devuelve el texto en crudo y los enlaces de un artículo de la wikipedia
@@ -63,9 +70,9 @@ class SAR_Wiki_Crawler:
                 en inglés o español
         """
         if not self.is_valid_url(url):
-            raise ValueError((
-                f"El enlace '{url}' no es un artículo de la Wikipedia en español"
-            ))
+            raise ValueError(
+                (f"El enlace '{url}' no es un artículo de la Wikipedia en español")
+            )
 
         try:
             req = requests.get(url)
@@ -73,36 +80,37 @@ class SAR_Wiki_Crawler:
             print(f"ERROR: - {url} - {ex}")
             return None
 
-
         # Solo devolvemos el resultado si la petición ha sido correcta
         if req.status_code == 200:
             soup = bs4.BeautifulSoup(req.text, "lxml")
             urls = set()
 
-            for ele in soup.select((
-                'div#catlinks, div.printfooter, div.mw-authority-control'
-            )):
+            for ele in soup.select(
+                ("div#catlinks, div.printfooter, div.mw-authority-control")
+            ):
                 ele.decompose()
-            
+
             # Recogemos todos los enlaces del contenido del artículo
             for a in soup.select("div#bodyContent a", href=True):
                 href = a.get("href")
                 if href is not None:
-                    if(href.startswith("/wiki/")):
+                    if href.startswith("/wiki/"):
                         href = urljoin(url, href)
                     urls.add(href)
-                    
+
             # Contenido del artículo
-            content = soup.select((
-                "h1.firstHeading,"
-                "div#mw-content-text h2,"
-                "div#mw-content-text h3,"
-                "div#mw-content-text h4,"
-                "div#mw-content-text p,"
-                "div#mw-content-text ul,"
-                "div#mw-content-text li,"
-                "div#mw-content-text span"
-            ))
+            content = soup.select(
+                (
+                    "h1.firstHeading,"
+                    "div#mw-content-text h2,"
+                    "div#mw-content-text h3,"
+                    "div#mw-content-text h4,"
+                    "div#mw-content-text p,"
+                    "div#mw-content-text ul,"
+                    "div#mw-content-text li,"
+                    "div#mw-content-text span"
+                )
+            )
 
             dedup_content = []
             seen = set()
@@ -125,14 +133,15 @@ class SAR_Wiki_Crawler:
             )
 
             # Eliminamos el texto de las anclas de editar
-            text = self.edit_re.sub('', text)
+            text = self.edit_re.sub("", text)
 
             return text, sorted(list(urls))
 
         return None
 
-
-    def parse_wikipedia_textual_content(self, text: str, url: str) -> Optional[Dict[str, Union[str,List]]]:
+    def parse_wikipedia_textual_content(
+        self, text: str, url: str
+    ) -> Optional[Dict[str, Union[str, List]]]:
         """Devuelve una estructura tipo artículo a partir del text en crudo
 
         Args:
@@ -154,36 +163,63 @@ class SAR_Wiki_Crawler:
             en caso de no encontrar título o resúmen del artículo, devolverá None
 
         """
+
         def clean_text(txt):
-            return '\n'.join(l for l in txt.split('\n') if len(l) > 0)
+            return "\n".join(l for l in txt.split("\n") if len(l) > 0)
 
         document = None
 
         # COMPLETAR
-        
+
         cleanedText = clean_text(text)
-    
+
         document = {"url": url, "title": "", "summary": "", "sections": []}
+
+        # extraccion de title y summary
         document["title"] = self.title_sum_re.match(cleanedText).group("title")
         document["summary"] = self.title_sum_re.match(cleanedText).group("summary")
+
+        # Extracción de sections y subsections
         iter = list(self.sections_re.finditer(cleanedText))
         for i in range(0, len(iter)):
-            nextSection = iter[i+1] if i+1 < len(iter) else None
-            sectionText = cleanedText[iter[i].span()[0]: nextSection.span()[0] if nextSection is not None else len(cleanedText)]
+            nextSection = iter[i + 1] if i + 1 < len(iter) else None
+            sectionText = cleanedText[
+                iter[i].span()[0] : (
+                    nextSection.span()[0]
+                    if nextSection is not None
+                    else len(cleanedText)
+                )
+            ]
             parsedSection = self.section_re.match(sectionText).groupdict()
-            document["sections"].append({"name": parsedSection["name"], "text": parsedSection["text"], "subsections": []})
+            document["sections"].append(
+                {
+                    "name": parsedSection["name"],
+                    "text": parsedSection["text"],
+                    "subsections": [],
+                }
+            )
             iter2 = list(self.subsections_re.finditer(parsedSection["rest"]))
             for i in range(0, len(iter2)):
-                nextSubsection = iter2[i+1] if i+1 < len(iter2) else None
-                subsectionText = parsedSection["rest"][iter2[i].span()[0]: nextSubsection.span()[0] if nextSubsection is not None else len(parsedSection["rest"])]
+                nextSubsection = iter2[i + 1] if i + 1 < len(iter2) else None
+                subsectionText = parsedSection["rest"][
+                    iter2[i].span()[0] : (
+                        nextSubsection.span()[0]
+                        if nextSubsection is not None
+                        else len(parsedSection["rest"])
+                    )
+                ]
                 parsedSubsection = self.subsection_re.match(subsectionText).groupdict()
-                document["sections"][-1]["subsections"].append({"name": parsedSubsection["name"], "text": parsedSubsection["text"]})
+                document["sections"][-1]["subsections"].append(
+                    {"name": parsedSubsection["name"], "text": parsedSubsection["text"]}
+                )
         return document
 
-
-    def save_documents(self,
-        documents: List[dict], base_filename: str,
-        num_file: Optional[int] = None, total_files: Optional[int] = None
+    def save_documents(
+        self,
+        documents: List[dict],
+        base_filename: str,
+        num_file: Optional[int] = None,
+        total_files: Optional[int] = None,
     ):
         """Guarda una lista de documentos (text, url) en un fichero tipo json lines
         (.json). El nombre del fichero se autogenera en base al base_filename,
@@ -215,16 +251,17 @@ class SAR_Wiki_Crawler:
             for doc in documents:
                 print(json.dumps(doc, ensure_ascii=True), file=ofile)
 
-
-    def start_crawling(self, 
-                    initial_urls: List[str], document_limit: int,
-                    base_filename: str, batch_size: Optional[int], max_depth_level: int,
-                    ):        
-         
-
-        """Comienza la captura de entradas de la Wikipedia a partir de una lista de urls válidas, 
+    def start_crawling(
+        self,
+        initial_urls: List[str],
+        document_limit: int,
+        base_filename: str,
+        batch_size: Optional[int],
+        max_depth_level: int,
+    ):
+        """Comienza la captura de entradas de la Wikipedia a partir de una lista de urls válidas,
             termina cuando no hay urls en la cola o llega al máximo de documentos a capturar.
-        
+
         Args:
             initial_urls: Direcciones a artículos de la Wikipedia
             document_limit (int): Máximo número de documentos a capturar
@@ -256,15 +293,14 @@ class SAR_Wiki_Crawler:
             # Suponemos que vamos a poder alcanzar el límite para la nomenclatura
             # de guardado
             total_files = math.ceil(document_limit / batch_size)
-            
-        
+
         while total_documents_captured < document_limit and len(queue) > 0:
             # Obtenemos el nivel de profundidad de la URL actual
             depth, parent_url, current_url = hq.heappop(queue)
             # Si la URL ya ha sido visitada, pasamos a la siguiente
             if current_url in visited:
                 continue
-            
+
             visited.add(current_url)
 
             # Capturamos el contenido de la URL
@@ -293,7 +329,6 @@ class SAR_Wiki_Crawler:
                 print(f"Guardando {len(documents)} documentos en {base_filename}")
                 self.save_documents(documents, base_filename, files_count, total_files)
                 documents.clear()
-                
 
             # Añadimos las URLs a la cola
             for url in urls:
@@ -301,24 +336,25 @@ class SAR_Wiki_Crawler:
                     if max_depth_level > 0 and depth <= max_depth_level:
                         print(f"Anadiendo {url} a la cola")
                         hq.heappush(queue, (depth + 1, current_url, url))
-        
+
         # Guardamos los documentos restantes
         if documents:
             files_count += 1
             print(f"HGuardando {len(documents)} documentos en {base_filename}")
             self.save_documents(documents, base_filename, files_count, total_files)
             documents.clear()
-            
 
-        
-
-    def wikipedia_crawling_from_url(self,
-        initial_url: str, document_limit: int, base_filename: str,
-        batch_size: Optional[int], max_depth_level: int
+    def wikipedia_crawling_from_url(
+        self,
+        initial_url: str,
+        document_limit: int,
+        base_filename: str,
+        batch_size: Optional[int],
+        max_depth_level: int,
     ):
         """Captura un conjunto de entradas de la Wikipedia, hasta terminar
         o llegar al máximo de documentos a capturar.
-        
+
         Args:
             initial_url (str): Dirección a un artículo de la Wikipedia
             document_limit (int): Máximo número de documentos a capturar
@@ -332,14 +368,20 @@ class SAR_Wiki_Crawler:
                 "Es necesario partir de un artículo de la Wikipedia en español"
             )
 
-        self.start_crawling(initial_urls=[initial_url], document_limit=document_limit, base_filename=base_filename,
-                            batch_size=batch_size, max_depth_level=max_depth_level)
+        self.start_crawling(
+            initial_urls=[initial_url],
+            document_limit=document_limit,
+            base_filename=base_filename,
+            batch_size=batch_size,
+            max_depth_level=max_depth_level,
+        )
 
-
-
-    def wikipedia_crawling_from_url_list(self,
-        urls_filename: str, document_limit: int, base_filename: str,
-        batch_size: Optional[int]
+    def wikipedia_crawling_from_url_list(
+        self,
+        urls_filename: str,
+        document_limit: int,
+        base_filename: str,
+        batch_size: Optional[int],
     ):
         """A partir de un fichero de direcciones, captura todas aquellas que sean
         artículos de la Wikipedia válidos
@@ -361,22 +403,20 @@ class SAR_Wiki_Crawler:
                 # Comprobamos si es una dirección a un artículo de la Wikipedia
                 if self.is_valid_url(url):
                     if not url.startswith("http"):
-                        raise ValueError(
-                            "El fichero debe contener URLs absolutas"
-                        )
+                        raise ValueError("El fichero debe contener URLs absolutas")
 
                     urls.append(url)
 
-        urls = list(set(urls)) # eliminamos posibles duplicados
+        urls = list(set(urls))  # eliminamos posibles duplicados
 
-        self.start_crawling(initial_urls=urls, document_limit=document_limit, base_filename=base_filename,
-                            batch_size=batch_size, max_depth_level=0)
-
-
-
+        self.start_crawling(
+            initial_urls=urls,
+            document_limit=document_limit,
+            base_filename=base_filename,
+            batch_size=batch_size,
+            max_depth_level=0,
+        )
 
 
 if __name__ == "__main__":
-    raise Exception(
-        "Esto es una librería y no se puede usar como fichero ejecutable"
-    )
+    raise Exception("Esto es una librería y no se puede usar como fichero ejecutable")

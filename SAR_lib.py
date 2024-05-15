@@ -1,3 +1,12 @@
+# TRABAJO REALIZADO POR:
+# Castelló Beltrán, J; Guzman Alamos, R & Jaen Ruiz, A.J.
+# MÉTODOS IMPLEMENTADOS:
+#   index_file
+#   show_stats
+#
+#
+
+
 import json
 from nltk.stem.snowball import SnowballStemmer
 import os
@@ -366,6 +375,11 @@ class SAR_Indexer:
         print("---------------------------------------------------")
         print(f"TOKENS: \n       # of tokens in 'all': {len(self.index)}")
         print("===================================================")
+        if self.positional:
+            print("Positional queries are allowed.")
+        else:
+            print("Positional queries are NOT allowed.")
+        print("========================================")
 
     #################################
     ###                           ###
@@ -503,6 +517,7 @@ class SAR_Indexer:
         if terms[0] in self.index:
             for tupla in self.index[terms[0]].items():
                 artid, listpos = tupla
+                # Para cada posicion en cada artículo compruebo si hay un termino en la pos + 1 en el mismo artículo
                 for pos in listpos:
                     sigo = True
                     for term in (term for term in terms[1:] if sigo):
@@ -510,13 +525,13 @@ class SAR_Indexer:
                             if artid in self.index[term]:
                                 if (pos + 1) in self.index[term][artid]:
                                     pos += 1
-                                    encontrado = True
                                 else:
                                     sigo = False
                             else:
                                 sigo = False
                         else:
                             sigo = False
+                    # En caso de que sigo sea true significa que lo ha encontrado, y si no esta repetido el artid lo guarda y pasa al siguiente artid
                     if sigo and artid not in res:
                         res += [artid]
                         break
@@ -593,7 +608,22 @@ class SAR_Indexer:
         return: posting list con los artid incluidos en p1 y p2
 
         """
-        return sorted(set(p1).intersection(p2))
+        res = []
+        i = 0
+        j = 0
+
+        # Meto lo artículos que coincidan en p1 y p2 de manera ordenada
+        while i < len(p1) and j < len(p2):
+            if p1[i] == p2[j]:
+                res.append(p1[i])
+                i += 1
+                j += 1
+            elif p1[i] <= p2[j]:
+                i += 1
+            elif p1[i] >= p2[j]:
+                j += 1
+
+        return res
 
     def or_posting(self, p1: list, p2: list):
         """
@@ -607,11 +637,30 @@ class SAR_Indexer:
         return: posting list con los artid incluidos de p1 o p2
 
         """
-        ########################################
-        ## COMPLETAR PARA TODAS LAS VERSIONES ##
-        ########################################
+        res = []
+        i = 0
+        j = 0
 
-        return sorted(set(p1).union(p2))
+        # Meto todo artículo que haya en p1 y p2 en res de manera ordenada
+        while i < len(p1) and j < len(p2):
+            if p1[i] == p2[j]:
+                res.append(p1[i])
+                i += 1
+                j += 1
+            elif p1[i] <= p2[j]:
+                res.append(p1[i])
+                i += 1
+            elif p1[i] >= p2[j]:
+                res.append(p2[j])
+                j += 1
+        # Termino de recorrer las listas en caso de que una se mas larga que la otra
+        for pos in range(i, len(p1)):
+            res.append(p1[pos])
+
+        for pos in range(j, len(p2)):
+            res.append(p2[pos])
+
+        return res
 
     def minus_posting(self, p1, p2):
         """
