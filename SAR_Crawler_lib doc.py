@@ -177,42 +177,42 @@ class SAR_Wiki_Crawler:
 
         # extraccion de title y summary
         try: # En caso de que no se pueda extraer, se devuelve None
-            document["title"] = self.title_sum_re.match(cleanedText).group("title")
-            document["summary"] = self.title_sum_re.match(cleanedText).group("summary")
+            document["title"] = self.title_sum_re.match(cleanedText).group("title") # Extraemos el título
+            document["summary"] = self.title_sum_re.match(cleanedText).group("summary") # Extraemos el resumen
             
             # Extracción de sections y subsections
-            iter = list(self.sections_re.finditer(cleanedText))
-            for i in range(0, len(iter)):
-                nextSection = iter[i + 1] if i + 1 < len(iter) else None
+            iter = list(self.sections_re.finditer(cleanedText)) # Extraemos las secciones
+            for i in range(0, len(iter)): # Recorremos las secciones
+                nextSection = iter[i + 1] if i + 1 < len(iter) else None # Extraemos la siguiente sección
                 sectionText = cleanedText[
-                    iter[i].span()[0] : (
-                        nextSection.span()[0]
-                        if nextSection is not None
-                        else len(cleanedText)
-                    )
-                ]
-                parsedSection = self.section_re.match(sectionText).groupdict()
-                document["sections"].append(
+                    iter[i].span()[0] : ( # Extraemos el texto de la sección
+                        nextSection.span()[0] # Extraemos donde comienza la siguiente sección,o donde termina esta
+                        if nextSection is not None # Si hay siguiente sección
+                        else len(cleanedText) # Si no hay siguiente sección
+                    ) # Extraemos el texto de la sección
+                ] 
+                parsedSection = self.section_re.match(sectionText).groupdict() # Parseamos la sección
+                document["sections"].append( # Añadimos la sección al documento
                     {
                         "name": parsedSection["name"],
                         "text": parsedSection["text"],
                         "subsections": [],
                     }
                 )
-                iter2 = list(self.subsections_re.finditer(parsedSection["rest"]))
-                for i in range(0, len(iter2)):
-                    nextSubsection = iter2[i + 1] if i + 1 < len(iter2) else None
-                    subsectionText = parsedSection["rest"][
-                        iter2[i].span()[0] : (
-                            nextSubsection.span()[0]
-                            if nextSubsection is not None
-                            else len(parsedSection["rest"])
-                        )
-                    ]
-                    parsedSubsection = self.subsection_re.match(subsectionText).groupdict()
-                    document["sections"][-1]["subsections"].append(
-                        {"name": parsedSubsection["name"], "text": parsedSubsection["text"]}
-                    )
+                iter2 = list(self.subsections_re.finditer(parsedSection["rest"])) # Extraemos las subsecciones
+                for i in range(0, len(iter2)): # Recorremos las subsecciones
+                    nextSubsection = iter2[i + 1] if i + 1 < len(iter2) else None # Extraemos la siguiente subsección
+                    subsectionText = parsedSection["rest"][ # Extraemos el texto de la subsección
+                        iter2[i].span()[0] : ( # Extraemos el texto de la subsección
+                            nextSubsection.span()[0] # Extraemos donde comienza la siguiente subsección,o donde termina esta
+                            if nextSubsection is not None # Si hay siguiente subsección
+                            else len(parsedSection["rest"]) # Si no hay siguiente sección
+                        ) # Extraemos el texto de la subsección
+                    ] 
+                    parsedSubsection = self.subsection_re.match(subsectionText).groupdict() # Parseamos la subsección
+                    document["sections"][-1]["subsections"].append( # Añadimos la subsección a la sección
+                        {"name": parsedSubsection["name"], "text": parsedSubsection["text"]} # Añadimos la subsección a la sección
+                    ) # Añadimos la subsección a la sección
         except:
             return None
 
@@ -300,12 +300,12 @@ class SAR_Wiki_Crawler:
             total_files = math.ceil(document_limit / batch_size)
 
         while total_documents_captured < document_limit and len(queue) > 0:
-            # Obtenemos el nivel de profundidad de la URL actual
+            # Obtenemos el nivel de profundidad de la URL actual, la URL padre y la URL actual
             depth, parent_url, current_url = hq.heappop(queue)
             
-            if depth > max_depth_level:
-                print(f"Profundidad máxima alcanzada en {current_url}")
-                break
+            if depth > max_depth_level: # Si la profundidad es mayor que la máxima, paramos
+                print(f"Profundidad máxima alcanzada en {current_url}") # Mostramos mensaje
+                break # Paramos
             
             # Si la URL ya ha sido visitada, pasamos a la siguiente
             if current_url in visited:
@@ -320,7 +320,7 @@ class SAR_Wiki_Crawler:
             if content is None:
                 continue
 
-            text, urls = content
+            text, urls = content # Extraemos el texto y las URLs
 
             # Parseamos el contenido capturado
             document = self.parse_wikipedia_textual_content(text, current_url)
@@ -329,30 +329,30 @@ class SAR_Wiki_Crawler:
             if document is None:
                 continue
 
-            documents.append(document)
-            total_documents_captured += 1
-            print(f"Capturado documento {total_documents_captured} - {current_url}")
+            documents.append(document) # Añadimos el documento a la lista de documentos
+            total_documents_captured += 1 # Aumentamos el contador de documentos capturados
+            print(f"Capturado documento {total_documents_captured} - {current_url}") # Mostramos mensaje
 
             # Guardamos los documentos capturados
-            if batch_size is not None and len(documents) == batch_size:
-                files_count += 1
-                print(f"Guardando {len(documents)} documentos en {base_filename}")
-                self.save_documents(documents, base_filename, files_count, total_files)
-                documents.clear()
+            if batch_size is not None and len(documents) == batch_size: # Si el tamaño del batch es el mismo que el tamaño del documento
+                files_count += 1 # Aumentamos el contador de ficheros
+                print(f"Guardando {len(documents)} documentos en {base_filename}") # Mostramos mensaje
+                self.save_documents(documents, base_filename, files_count, total_files) # Guardamos los documentos
+                documents.clear() # Limpiamos la lista de documentos
 
             # Añadimos las URLs a la cola
-            for url in urls:
-                if url not in visited and self.is_valid_url(url):
-                    if max_depth_level > 0 and depth <= max_depth_level:
+            for url in urls: # Recorremos las URLs
+                if url not in visited and self.is_valid_url(url): # Si la URL no ha sido visitada y es válida
+                    if max_depth_level > 0 and depth <= max_depth_level: # Si la profundidad máxima es mayor que 0 y la profundidad es menor o igual que la máxima
                         print(f"Anadiendo {url} a la cola")
-                        hq.heappush(queue, (depth + 1, current_url, url))
+                        hq.heappush(queue, (depth + 1, current_url, url)) # Añadimos la URL a la cola, aumentando la profundidad
 
         # Guardamos los documentos restantes
-        if documents:
-            files_count += 1
-            print(f"Guardando {len(documents)} documentos en {base_filename}")
-            self.save_documents(documents, base_filename, files_count, total_files)
-            documents.clear()
+        if documents: # Si hay documentos
+            files_count += 1 # Aumentamos el contador de ficheros
+            print(f"Guardando {len(documents)} documentos en {base_filename}") # Mostramos mensaje
+            self.save_documents(documents, base_filename, files_count, total_files) # Guardamos los documentos
+            documents.clear() # Limpiamos la lista de documentos
 
     def wikipedia_crawling_from_url(
         self,
