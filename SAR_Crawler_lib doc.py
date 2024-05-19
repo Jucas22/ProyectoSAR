@@ -394,7 +394,7 @@ class SAR_Wiki_Crawler:
         batch_size: Optional[int],
     ):
         """A partir de un fichero de direcciones, captura todas aquellas que sean
-        artículos de la Wikipedia válidos
+        artículos de la Wikipedia válidos.
 
         Args:
             urls_filename (str): Lista de direcciones
