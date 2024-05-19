@@ -727,20 +727,22 @@ class SAR_Indexer:
                     print(query)
         return results
 
-    def solve_and_test(self, ql: List[str]) -> bool:
+    def solve_and_test(self, ql:List[str]) -> bool:
         errors = False
         for line in ql:
-            if len(line) > 0 and line[0] != "#":
-                query, ref = line.split("\t")
+            if len(line) > 0 and line[0] != '#':
+                query, ref = line.split('\t')
                 reference = int(ref)
                 result = len(self.solve_query(query))
                 if reference == result:
-                    print(f"{query}\t{result}")
+                    print(f'{query}\t{result}')
                 else:
-                    print(f">>>>{query}\t{reference} != {result}<<<<")
+                    print(f'>>>>{query}\t{reference} != {result}<<<<')
                     errors = True
+
             else:
                 print(line)
+
         return not errors
 
     def solve_and_show(self, query: str):
