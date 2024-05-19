@@ -214,7 +214,11 @@ class SAR_Indexer:
 
         # id de cada documento:
         id = 0
-
+       
+        for field, tokenize in self.fields:
+            self.index[field] = {}
+        
+        
         file_or_dir = Path(root)
 
         if file_or_dir.is_file():
@@ -293,13 +297,21 @@ class SAR_Indexer:
             artid = len(self.articles)
             self.articles[artid] = (len(self.docs) - 1, i + 1)
             pos = 0
-            for token in self.tokenize(j["all"]):
-                if token not in self.index:
-                    self.index[token] = {}
-                if artid not in self.index[token]:
-                    self.index[token][artid] = []
-                self.index[token][artid].append(pos)
-                pos += 1
+            for field, tokenize in self.fields:
+                pos = 0
+                if tokenize:
+                    for token in self.tokenize(j[field]):
+                        if token not in self.index[field]:
+                            self.index[field][token] = {}
+                        if artid not in self.index[field][token]:
+                            self.index[field][token][artid] = []
+                        self.index[field][token][artid].append(pos)
+                        pos += 1
+                else:
+                    for url in j[field].split():
+                        self.index[field][url] = artid
+        
+        # print(self.index["all"]["oric"].keys())
         # En la version basica solo se debe indexar el contenido "article"
         #
 
@@ -378,7 +390,10 @@ class SAR_Indexer:
         print("---------------------------------------------------")
         print(f"Number of indexed articles: {len(self.urls)}")
         print("---------------------------------------------------")
-        print(f"TOKENS: \n       # of tokens in 'all': {len(self.index)}")
+        print(f"TOKENS: \n         ")
+        for field, tokenize in self.fields: 
+            if len(self.index[field]) > 0:
+                print(f"        # of tokens in '{field}': {len(self.index[field])}")
         print("===================================================")
         if self.positional:
             print("Positional queries are allowed.")
@@ -415,75 +430,80 @@ class SAR_Indexer:
         """
         if query is None or len(query) == 0:
             return []
-
-        terms = query.replace('"', " ")
-        terms = terms.split()
-        i = 0
-        res = []
-        # Consultas posiconales:
-        while i < len(terms):
-            term = terms[i]
-            aux = 0
-            posicionales = []
-            if term == "AND":
-                res += ["AND"]
-                i += 1
-            elif term == "OR":
-                res += ["OR"]
-                i += 1
-            elif term == "NOT":
-                res += ["NOT"]
-                i += 1
+        
+        def get_posting_list(term, field="all"):
+            if isinstance(term, list):
+                return self.get_positionals(term, field)
             else:
-                while (
-                    (i + aux) < len(terms)
-                    and terms[i + aux] != "AND"
-                    and terms[i + aux] != "OR"
-                    and terms[i + aux] != "NOT"
-                ):
-                    posicionales.append(terms[i + aux])
-                    aux += 1
-                if len(posicionales) == 1:
-                    res.append(self.get_posting(term))
-                    i += 1
-                else:
-                    res.append(self.get_positionals(posicionales, False))
-                    i += aux
+                return self.get_posting(term, field)
 
-        # Consulta normal
-        solve = []
-        # print(res)
-        i = 0
-        while i < len(res):
-            r = res[i]
-            if res[i] == "NOT":
-                solve = self.reverse_posting(res[i + 1])
-                i += 2
-            elif res[i] == "AND":
-                if res[i + 1] == "NOT":
-                    sig = self.reverse_posting(res[i + 2])
-                    i += 3
-                else:
-                    sig = res[i + 1]
-                    i += 2
-                solve = self.and_posting(solve, sig)
-            elif res[i] == "OR":
-                if res[i + 1] == "NOT":
-                    sig = self.reverse_posting(res[i + 2])
-                    i += 3
-                else:
-                    sig = res[i + 1]
-                    i += 2
-                solve = self.or_posting(solve, sig)
+        def apply_operator(values, operator):
+            if operator == 'NOT':
+                if values:
+                    value = values.pop()
+                    values.append(self.reverse_posting(value))
             else:
-                solve = r
+                if len(values) >= 2:
+                    right = values.pop()
+                    left = values.pop()
+                    if operator == 'AND':
+                        values.append(self.and_posting(left, right))
+                    elif operator == 'OR':
+                        values.append(self.or_posting(left, right))
+
+
+        def eval_expression(tokens):
+            values = []
+            operators = []
+
+            i = 0
+            while i < len(tokens):
+                token = tokens[i]
+                if token == 'NOT':
+                    operators.append(token)
+                elif token in {'AND', 'OR'}:
+                    while operators and operators[-1] != '(':
+                        apply_operator(values, operators.pop())
+                    operators.append(token)
+                elif token == '(':
+                    operators.append(token)
+                elif token == ')':
+                    while operators and operators[-1] != '(':
+                        apply_operator(values, operators.pop())
+                    operators.pop()  # Sacar ( de los operadores
+                else:
+                    field = "all"
+                    pos_term = []
+                    while i < len(tokens) and tokens[i] not in {'AND', 'OR', 'NOT', '(', ')'}:
+                        if ":" in tokens[i]:
+                            field, term = tokens[i].split(":")
+                            pos_term.append(term.lower())
+                        else:
+                            pos_term.append(tokens[i].lower())
+                        i += 1
+                    if len(pos_term) > 1:
+                        values.append(get_posting_list(pos_term, field))
+                    else:
+                        values.append(get_posting_list(pos_term[0], field))
+                    continue  # Continue para evitar que se incemente i dos veces
                 i += 1
-        return solve
+
+            while operators:
+                apply_operator(values, operators.pop())
+
+            return values[0]
+
+        query = re.sub(r'([()])', r' \1 ', query)
+        query = query.replace('"', " ")
+        terms = query.split()
+
+        return eval_expression(terms)
+
         ########################################
         ## COMPLETAR PARA TODAS LAS VERSIONES ##
         ########################################
 
-    def get_posting(self, term: str, field: Optional[str] = None):
+    def get_posting(self, term: str, field: Optional[str] = "all"):
         """
 
         Devuelve la posting list asociada a un termino.
@@ -501,12 +521,13 @@ class SAR_Indexer:
         NECESARIO PARA TODAS LAS VERSIONES
 
         """
-        if term in self.index:
-            return list(self.index[term].keys())
+        if term in self.index[field]:
+            return list(self.index[field][term].keys())
         else:
             return []
+        
 
-    def get_positionals(self, terms: str, index):
+    def get_positionals(self, terms: str, field: Optional[str] = "all"):
         """
 
         Devuelve la posting list asociada a una secuencia de terminos consecutivos.
@@ -519,16 +540,16 @@ class SAR_Indexer:
 
         """
         res = []
-        if terms[0] in self.index:
-            for tupla in self.index[terms[0]].items():
+        if terms[0] in self.index[field]:
+            for tupla in self.index[field][terms[0]].items():
                 artid, listpos = tupla
                 # Para cada posicion en cada artículo compruebo si hay un termino en la pos + 1 en el mismo artículo
                 for pos in listpos:
                     sigo = True
                     for term in (term for term in terms[1:] if sigo):
-                        if term in self.index:
-                            if artid in self.index[term]:
-                                if (pos + 1) in self.index[term][artid]:
+                        if term in self.index[field]:
+                            if artid in self.index[field][term]:
+                                if (pos + 1) in self.index[field][term][artid]:
                                     pos += 1
                                 else:
                                     sigo = False
@@ -733,25 +754,66 @@ class SAR_Indexer:
         return: el numero de artículo recuperadas, para la opcion -T
 
         """
-        results = self.solve_query(query)
+        results = self.solve_query(query)                 
         i = 0
         stop = (
             len(results)
             if self.show_all
             else (10 if len(results) > 10 else len(results))
-        )
+        )  
+        # print(results) 
+        # print(self.articles)
+        # print(self.docs)    
         while i < stop:
             articleFile = self.docs[self.articles[results[i]][0]]
+            # print(self.articles)
             fp = open(articleFile)
             for j, line in enumerate(fp):
-                if j == self.articles[results[i]][1]:
-                    url = json.loads(line)["url"]
-                    title = json.loads(line)["title"]
-            print(f"{i+1}. ID Articulo - {results[i]} URL: {url}")
+                if j == self.articles[results[i]][1]-1:
+                    parsedArticle = self.parse_article(line)
+            url = parsedArticle["url"]
+            title = parsedArticle["title"]
+            snippet = self.generate_snippet(query, parsedArticle["all"])        
+            print(f"\n{i+1}. ID Articulo - {results[i]} URL: {url}")
             print(f"Titulo: {title}")
             if self.show_snippet:
                 print("Snippet:")
-                print(json.loads(line)["summary"])
+                print(snippet)
             i += 1
+        print("===================================================")
+        print("Number of results: ", len(results))
 
         return len(results)
+    
+    def generate_snippet(self, query: str, doc: str, context_size: int = 5):
+        """
+        Genera un snippet para un documento basado en los términos de la consulta.
+
+        :param query: La consulta original.
+        :param doc: El texto completo del documento.
+        :param context_size: El número de palabras de contexto a mostrar alrededor del término.
+        :return: Un snippet del documento.
+        """
+        terms = query.split()
+        words = doc.split()
+        positions = []
+        
+        # Encontrar la primera ocurrencia de cada término
+        for term in terms:
+            try:
+                pos = words.index(term)
+                positions.append(pos)
+            except ValueError:
+                continue
+        
+        # Generar snippets
+        snippet_parts = []
+        for pos in positions:
+            start = max(0, pos - context_size)
+            end = min(len(words), pos + context_size + 1)
+            snippet_parts.append(" ".join(words[start:end]))
+
+        # Unir snippets y añadir delimitadores
+        snippet = " ... ".join(snippet_parts)
+        snippet = "..." + snippet + "..."
+        return snippet
