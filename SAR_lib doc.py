@@ -353,8 +353,12 @@ class SAR_Indexer:
 
 
         """
-
-        pass
+        for i in self.index["all"].keys():
+            stem = self.stemmer.stem(i)
+            if stem not in self.sindex:
+                self.sindex[stem] = [i]
+            else:
+                self.sindex[stem].append(i)
         ####################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE STEMMING ##
         ####################################################

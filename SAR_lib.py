@@ -104,6 +104,7 @@ class SAR_Indexer:
         # Para eliminar los simbolos no alfanuméricos
         self.r3 = re.compile("[^a-zA-Z0-9\s]")
         self.info = {}
+       
 
     ###############################
     ###                         ###
@@ -298,6 +299,8 @@ class SAR_Indexer:
             self.articles[artid] = (len(self.docs) - 1, i + 1)
             pos = 0
             for field, tokenize in self.fields:
+                if not self.multifield: 
+                    field = "all"
                 pos = 0
                 if tokenize:
                     for token in self.tokenize(j[field]):
@@ -307,9 +310,14 @@ class SAR_Indexer:
                             self.index[field][token][artid] = []
                         self.index[field][token][artid].append(pos)
                         pos += 1
+                    if not self.multifield: 
+                        break
                 else:
                     for url in j[field].split():
                         self.index[field][url] = artid
+        
+        if self.stemming:
+            self.make_stemming()
         
         # En la version basica solo se debe indexar el contenido "article"
         #
@@ -353,8 +361,19 @@ class SAR_Indexer:
 
 
         """
+        
+        for field, tokenize in self.fields: # Recorre los campos
+            self.sindex[field] = {} # Inicializa el índice de stems de cada campo
 
-        pass
+        for field, tokenize in self.fields:
+            for claveIndex in self.index[field]:
+                stemTerm = self.stemmer.stem(claveIndex)
+                if stemTerm not in self.sindex[field]:  # Si el stem de la entrada del "index" no está en el índice de stems
+                    self.sindex[field][stemTerm] = []   # Se añade dicho stem como una nueva clave (inicialmente, una lista vacía)
+                    self.sindex[field][stemTerm].append(claveIndex)  # Se añade a lista de valores para ese stem, la palabra de origen del "index"
+                else:  # En caso de que el stem de la entrada del "index" ya estuviera en el índice de stems
+                    if claveIndex not in self.sindex[field][stemTerm]:  # Se comprueba si la palabra de origen del "index" no estaba ya en la lista correspondiente a su stem
+                        self.sindex[field][stemTerm].append(claveIndex)  # y, si no lo estaba, se añade
         ####################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE STEMMING ##
         ####################################################
@@ -393,6 +412,12 @@ class SAR_Indexer:
         for field, tokenize in self.fields: 
             if len(self.index[field]) > 0:
                 print(f"        # of tokens in '{field}': {len(self.index[field])}")
+        if self.stemming:
+            print("---------------------------------------------------")
+            print(f"STEMS: \n         ")
+            for field, tokenize in self.fields: 
+                if len(self.sindex[field]) > 0:
+                    print(f"        # of stems in '{field}': {len(self.sindex[field])}")
         print("===================================================")
         if self.positional:
             print("Positional queries are allowed.")
@@ -434,7 +459,7 @@ class SAR_Indexer:
             if isinstance(term, list):
                 return self.get_positionals(term, field)
             else:
-                return self.get_posting(term, field)
+                return self.get_stemming(term, field) if self.use_stemming else self.get_posting(term, field)
 
         def apply_operator(values, operator):
             if operator == 'NOT':
@@ -569,7 +594,7 @@ class SAR_Indexer:
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE POSICIONALES ##
         ########################################################
 
-    def get_stemming(self, term: str, field: Optional[str] = None):
+    def get_stemming(self, term: str, field: Optional[str] = "all"):
         """
 
         Devuelve la posting list asociada al stem de un termino.
@@ -581,8 +606,15 @@ class SAR_Indexer:
         return: posting list
 
         """
-
+        
         stem = self.stemmer.stem(term)
+        if stem in self.sindex[field]:
+            postingList = []
+            for word in list(self.sindex[field][stem]):
+                postingList.extend(self.get_posting(word, field))
+            return list(set(postingList))
+        else:
+            return []
 
         ####################################################
         ## COMPLETAR PARA FUNCIONALIDAD EXTRA DE STEMMING ##
@@ -634,6 +666,7 @@ class SAR_Indexer:
         return: posting list con los artid incluidos en p1 y p2
 
         """
+        p1, p2 = sorted(p1), sorted(p2)
         res = []
         i = 0
         j = 0
@@ -663,6 +696,7 @@ class SAR_Indexer:
         return: posting list con los artid incluidos de p1 o p2
 
         """
+        p1, p2 = sorted(p1), sorted(p2)
         res = []
         i = 0
         j = 0
